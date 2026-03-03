@@ -1,144 +1,157 @@
-# Projekt Technologie Chmurowe - Sebastian Błaszczyk
+# Cloud Technologies Project - Microservices Architecture
 
-## Flow aplikacji
+## Overview
 
-### 1. Użytkownik otwiera aplikację w przeglądarce
+This project is a fully containerized, three-tier Full-Stack application (MERN stack: MongoDB, Express.js, React, Node.js) built with a microservices architecture. It serves as a practical demonstration of cloud-native best practices, focusing on containerization, orchestration, security, and data persistence using Docker and Kubernetes.
 
-### 2. Frontend (React) ładuje interfejs użytkownika
+## Application Flow & Architecture
 
-### 3. Pobieranie danych:
+### 1. User Interface (Frontend)
 
-- Frontend wysyła żądanie GET /api/items do backendu
+* The user accesses the application through a web browser.
+* The **React** frontend (built with Vite) loads the user interface and serves as the client-side interaction point.
 
-              // Przykładowe żądanie
-              fetch(`${API_URL}/items`)
+### 2. Data Retrieval (GET)
 
-### 4. Przetwarzanie w backendzie:
+* The Frontend sends a `GET /api/items` request to the Backend.
+* The **Node.js/Express** Backend receives the request and establishes a connection with the **MongoDB** database using secure credentials injected via Environment Variables / Kubernetes Secrets.
+* MongoDB queries the database and returns the 10 most recent items (`Item.find().sort({ createdAt: -1 }).limit(10)`).
+* The Backend formats this data into JSON and sends it back to the Frontend, which renders the list dynamically.
 
-- Backend odbiera żądanie
-- Łączy się z MongoDB za pomocą poświadczeń z Secretów
+### 3. Data Submission (POST)
 
-              // Połączenie z MongoDB
-              mongoose.connect(`mongodb://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}`)
+* The user fills out the form and clicks "Add Item".
+* The Frontend sends a `POST /api/items` request with a JSON payload (e.g., `{ "name": "Example", "value": 42 }`).
+* The Backend validates and saves the new record in MongoDB.
+* The new item instantly appears on the Frontend list without requiring a page reload.
 
-### 5. Operacje bazodanowe:
+## Key Features & Cloud-Native Practices
 
-- MongoDB zwraca 10 ostatnich pozycji
+* **Security:**
+  * Configured CORS with a dynamic list of allowed origins.
+  * Separation of concerns: Database credentials are never hardcoded. They are managed securely via a local `.env` file for Docker Compose and `Secret` objects in Kubernetes.
 
-              // Zapytanie do bazy danych
-              Item.find().sort({ createdAt: -1 }).limit(10)
 
-- Odpowiedź do frontendu:
-     - Backend zwraca dane w formacie JSON
-     - Frontend renderuje listę elementów
-- Dodawanie nowego elementu:
+* **Monitoring & Resilience:**
+  * Dedicated health check endpoint (`/api/health`) for readiness/liveness probes.
+  * Database auto-retry connection logic implemented in the backend.
+  * Comprehensive request logging.
 
-     - Użytkownik wypełnia formularz i klika "Add Item"
-     - Frontend wysyła żądanie POST /api/items
 
-                  // Przykładowy payload
-                  {
-                  name: "Przykład",
-                  value: 42
-                  }
+* **Scalability & Orchestration:**
+  * Kubernetes **Horizontal Pod Autoscaler (HPA)** configured to scale the backend dynamically based on CPU utilization (>80%).
+  * Multiple pod replicas for high availability.
+  * Frontend exposed via a `LoadBalancer` service, and internal routing handled by an **NGINX Ingress Controller**.
 
-     - Backend zapisuje dane w MongoDB
-     - Nowy element pojawia się na liście bez przeładowania strony
 
-### 6. Dodatkowe Funkcjonalności
+* **Data Persistence:**
+  * Docker Volumes mapped for local development.
+  * Kubernetes **Persistent Volume Claims (PVC)** ensure MongoDB data survives pod restarts.
 
-- Bezpieczeństwo:
-     - CORS z dynamiczną listą dozwolonych domen
-     - Walidacja danych wejściowych
-     - Sekrety dla poświadczeń bazy danych
-- Monitorowanie:
-     - Endpoint health check (/api/health)
-     - Logowanie wszystkich żądań
-     - Autoretry połączenia z bazą danych
-- Skalowalność:
-     - Horizontal Pod Autoscaler dla backendu
-     - Wielokrotne repliki usług
-     - LoadBalancer dla frontendu
-- Trwałość danych:
-     - Wolumeny Dockera dla MongoDB
-     - Persistent Volume Claims w Kubernetes
 
-### 7. Kluczowe Endpointy
+* **Optimized Containerization:**
+  * Multi-stage Docker builds utilizing lightweight Alpine Linux images to minimize attack surface and image size.
 
-| Endpoint    | Metoda | Opis                          |
-| ----------- | ------ | ----------------------------- |
-| /           | GET    | Interfejs użytkownika         |
-| /api/health | GET    | Status usługi i połączenia DB |
-| /api/items  | GET    | Pobierz listę elementów       |
-| /api/items  | POST   | Dodaj nowy element            |
 
-Aplikacja służy jako przykład implementacji pełnego stosu technologicznego w architekturze mikroserwisowej, demonstrując dobre praktyki w zakresie konteneryzacji, orkiestracji i zarządzania danymi.
 
-## Instrukcja Uruchomienia Aplikacji Mikroserwisowej
+## API Endpoints
 
-Wymagania wstępne
+| Endpoint | Method | Description |
+| --- | --- | --- |
+| `/` | GET | Serves the React User Interface |
+| `/api/health` | GET | Returns the service health and DB connection status |
+| `/api/items` | GET | Fetches the list of recent items |
+| `/api/items` | POST | Adds a new item to the database |
 
-- Docker Desktop:
-- Konto Docker Hub:
-- kubectl (instalowany automatycznie z Docker Desktop)
+---
 
-### Krok 1: Przygotowanie środowiska
+## Getting Started / Run Instructions
 
-- Sklonuj repozytorium (jeśli potrzebujesz):
-- Zbuduj i opublikuj obrazy na Docker Hub:
+### Prerequisites
 
-#### Backend:
+* [Docker Desktop](https://www.docker.com/products/docker-desktop/) (with Kubernetes enabled if running the K8s cluster locally)
+* A [Docker Hub](https://hub.docker.com/) account
+* `kubectl` CLI tool
 
-    cd backend
+### Step 1: Environment Preparation
 
-    docker buildx build --platform linux/amd64,linux/arm64 \
-    -t twoj-login-dockerhub/microservices-backend:latest --push .
+1. **Clone the repository** to your local machine.
+2. **Setup Environment Variables:** Create a `.env` file in the root directory (alongside `docker-compose.yaml`) with the following secure credentials:
+```env
+MONGO_INITDB_ROOT_USERNAME=admin
+MONGO_INITDB_ROOT_PASSWORD=secret
+DB_USER=admin
+DB_PASS=secret
+DB_HOST=mongo
+DB_PORT=27017
+DB_NAME=appdb
+PORT=5000
 
-#### Frontend:
+```
 
-    cd ../frontend
 
-    docker buildx build --platform linux/amd64,linux/arm64 \
-    -t twoj-login-dockerhub/microservices-frontend:latest --push .
+3. **Build and Push Docker Images:**
+*Navigate to the backend folder:*
+```bash
+cd backend
+docker buildx build --platform linux/amd64,linux/arm64 -t <your-dockerhub-username>/microservices-backend:latest --push .
 
-### Krok 2: Uruchomienie z Docker Compose
+```
 
-1.    Uruchom aplikację:
 
-          docker-compose up --build
+*Navigate to the frontend folder:*
+```bash
+cd ../frontend
+docker buildx build --platform linux/amd64,linux/arm64 -t <your-dockerhub-username>/microservices-frontend:latest --push .
 
-2.    Dostęp do aplikacji:
+```
 
-      Frontend: http://localhost:3000
 
-      Backend API: http://localhost:5000/api/items
 
-3.    Zatrzymanie aplikacji:
+### Step 2: Running with Docker Compose (Local Development)
 
-          docker-compose down -v
+1. **Start the application:**
+Navigate back to the root directory and run:
+```bash
+docker-compose up --build
 
-### Krok 3: Uruchomienie w Kubernetes (Docker Desktop)
+```
 
-1.    Włącz Kubernetes w Docker Desktop:
 
-2.    Przygotuj manifesty:
+2. **Access the application:**
+* Frontend UI: [http://localhost:3000](https://www.google.com/search?q=http://localhost:3000)
+* Backend API / Health: [http://localhost:5000/api/health](https://www.google.com/search?q=http://localhost:5000/api/health)
 
-      - Zaktualizuj nazwy obrazów w plikach:
 
-           backend-deployment.yaml → twoj-login-dockerhub/microservices-backend:latest
+3. **Stop the application:**
+```bash
+docker-compose down -v
 
-           frontend-deployment.yaml → twoj-login-dockerhub/microservices-frontend:latest
+```
 
-3.    Zastosuj konfigurację Kubernetes:
 
-          kubectl apply -f k8s/
 
-4.    Sprawdź status wdrożenia:
+### Step 3: Running with Kubernetes
 
-          kubectl get all
-          kubectl get ingress
-          kubectl describe ingress app-ingress
+1. Ensure a local Kubernetes cluster (like the one built into Docker Desktop or Minikube) is running.
+2. **Update Image References:** Edit `k8s/04-backend-deployment.yaml` and `k8s/07-frontend-deployment.yaml`. Replace the `image:` placeholders with your actual pushed Docker Hub image names.
+3. **Apply the Kubernetes Manifests:**
+Apply the entire configuration directory:
+```bash
+kubectl apply -f k8s/
 
-5.    Dostęp do aplikacji:
+```
 
-http://localhost
+
+4. **Verify the Deployment:**
+Check if all pods, services, and the ingress controller are running correctly:
+```bash
+kubectl get all
+kubectl get ingress
+kubectl describe ingress app-ingress
+
+```
+
+
+5. **Access the application:**
+Open your browser and navigate to: [http://localhost](https://www.google.com/search?q=http://localhost)
